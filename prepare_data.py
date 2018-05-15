@@ -77,7 +77,8 @@ def prepare_images(params):
             path = os.path.join(root, filename)
             if imghdr.what(path) != 'jpeg':
                 continue
-                
+            
+			#get GT and input LR    
             hr_image = misc.imread(path)
             height = hr_image.shape[0]
             new_height = height - height % ratio
@@ -85,27 +86,35 @@ def prepare_images(params):
             new_width = width - width % ratio
             hr_image = hr_image[0:new_height,0:new_width]
             blurred = ndimage.gaussian_filter(hr_image, sigma=(1, 1, 0))
-            lr_image = blurred[::ratio,::ratio,:]
+            lr_image = blurred[::ratio,::ratio,:]#?
 
+			#get patch_num=vertical_number*horizontal_number 
             height = hr_image.shape[0]
             width = hr_image.shape[1]
             vertical_number = height / hr_stride - 1
             horizontal_number = width / hr_stride - 1
+            
             image_num = image_num + 1
             if image_num % 10 == 0:
                 print "Finished image: {}".format(image_num)
+
+            #image save folder change to the Valid dir or test dir
             if image_num > training_num and image_num <= training_num + params['validation_num']:
                 folder = params['validation_image_dir'].format(ratio)
             elif image_num > training_num + params['validation_num']:
                 folder = params['test_image_dir'].format(ratio)
+
             #misc.imsave(folder + 'hr_full/' + filename[0:-4] + '.png', hr_image)
             #misc.imsave(folder + 'lr_full/' + filename[0:-4] + '.png', lr_image)
             for x in range(0, horizontal_number):
                 for y in range(0, vertical_number):
+					#get the sub patch
                     hr_sub_image = hr_image[y * hr_stride : y * hr_stride + hr_size, x * hr_stride : x * hr_stride + hr_size]
                     lr_sub_image = lr_image[y * lr_stride : y * lr_stride + lr_size, x * lr_stride : x * lr_stride + lr_size]
+					#save the sub_image_patch
                     misc.imsave("{}hr/{}_{}_{}.png".format(folder, filename[0:-4], y, x), hr_sub_image)
                     misc.imsave("{}lr/{}_{}_{}.png".format(folder, filename[0:-4], y, x), lr_sub_image)
+			#break the loop
             if image_num >= training_num + params['validation_num'] + params['test_num']:
                 break
         else:
@@ -136,14 +145,19 @@ def prepare_data(params):
             for filename in filenames:
                 lr_path = os.path.join(root, filename)
                 hr_path = image_dir + "/hr/" + filename
+
+				#read the LR and HR image
                 lr_image = misc.imread(lr_path)
                 hr_image = misc.imread(hr_path)
+
                 # convert to Ycbcr color space
                 lr_image_y = rgb2ycbcr(lr_image)
                 hr_image_y = rgb2ycbcr(hr_image)
+				#reshape to 1 dim
                 lr_data = lr_image_y.reshape((lr_size * lr_size * 3))
                 sub_hr_image_y = hr_image_y[hr_start_idx:hr_end_idx:1,hr_start_idx:hr_end_idx:1]
                 hr_data = my_anti_shuffle(sub_hr_image_y, ratio).reshape(sub_hr_size * sub_hr_size * 3)
+				#concatenate the LR and HR
                 data = np.concatenate([lr_data, hr_data])
                 data.astype('uint8').tofile(data_dir + "/" + filename[0:-4])
 
@@ -162,6 +176,7 @@ if __name__ == '__main__':
     print "Preparing images with scaling ratio: {}".format(params['ratio'])
     print "If you want a different ratio change 'ratio' in params.json"
     print "Splitting images (1/3)"
+	#from full image split into the sub_image_patch
     prepare_images(params)
 
     print "Preparing data, this may take a while (2/3)"
